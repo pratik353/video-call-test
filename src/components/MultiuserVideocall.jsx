@@ -1,19 +1,17 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import useMultiuserVideocallHook from "../customHooks/multiuserVideocallHook";
-import "./videoStream.css";
 import { fabric } from "fabric";
 
 import { io } from "socket.io-client";
 
-import Janus from "../janus/janus";
-import { server, iceServers } from "../janus/setting";
+import Janus from "../../src/janus/janus.js";
+import { server, iceServers } from "../../src/janus/setting.js";
 
 var janus = null;
 var sfutest = null;
 var opaqueId = "videoroom-" + Janus.randomString(12);
 
-var myroom = 1234; // Demo room
+var myroom = 5678; // Demo room
 
 var myusername = null;
 var myid = null;
@@ -27,15 +25,10 @@ var feeds = [],
   feedStreams = {};
 var bitrateTimer = [];
 
-let zoom = 1;
 var canvas;
-let videoTrack = []; 
-
-let  capabilities;
-let settings;
 
 const MultiuserVideocall = () => {
-  const location = useLocation();
+  // const location = useLocation();
 
   const customRoomIdRef = useRef(0);
   const captureVideoRef = useRef();
@@ -50,8 +43,7 @@ const MultiuserVideocall = () => {
   const [isPublishOwnFeed, setPublishOwnFeed] = useState();
   let isMuted;
   // const [ownId, setOwnId] = useState();
-  let remoteUserName;
-  // const [remoteUserName, setRemoteUserName] = useState("");
+  const [remoteUserName, setRemoteUserName] = useState("");
   const [counter, setCounter] = useState(0);
   console.warn("counter ", counter);
 
@@ -75,32 +67,28 @@ const MultiuserVideocall = () => {
     getQueryStringValue("msid") === "yes" ||
     getQueryStringValue("msid") === "true";
 
-  let socket = io.connect("http://192.168.1.69:3001");
+  // recording essentials
+  var acodec =
+    getQueryStringValue("acodec") !== "" ? getQueryStringValue("acodec") : null;
+  var vcodec =
+    getQueryStringValue("vcodec") !== "" ? getQueryStringValue("vcodec") : null;
+  var vprofile =
+    getQueryStringValue("vprofile") !== ""
+      ? getQueryStringValue("vprofile")
+      : null;
+  var doSimulcast =
+    getQueryStringValue("simulcast") === "yes" ||
+    getQueryStringValue("simulcast") === "true";
+  var doOpusred =
+    getQueryStringValue("opusred") === "yes" ||
+    getQueryStringValue("opusred") === "true";
 
-  // var rect = new fabric.Rect({
-  //   hoverCursor: "pointer",
-  //   left: 100,
-  //   top: 100,
-  //   fill: "transparent",
-  //   width: 80,
-  //   height: 80,
-  //   strokeWidth: 2,
-  //   stroke: "red",
-  // });
+  var recordData =
+    getQueryStringValue("data") !== "" ? getQueryStringValue("data") : null;
 
-  // var circle = (circle = new fabric.Circle({
-  //   radius: 30,
-  //   fill: "red",
-  //   left: 100,
-  //   top: 100,
-  // }));
-
-  console.log("component renderd");
+  let socket = io.connect("http://65.1.95.72:3001/");
 
   useEffect(() => {
-    // socket = io.connect("http://192.168.1.69:3001");
-    // console.log(socket);
-
     // Janus Initialization
     Janus.init({
       debug: "all",
@@ -114,78 +102,24 @@ const MultiuserVideocall = () => {
     let remoteStream = document.querySelector("#stream");
     const vidStyleData = remoteStream.getBoundingClientRect();
     canvas.setDimensions({
-      // width: vidStyleData.width,
-      width: 1080,
-      // height: vidStyleData.height,
-      height: 420,
+      width: 1280,
+      height: 670,
     });
-
-    // get support constraints of camera stream
-    const supports = navigator.mediaDevices.getSupportedConstraints()
-    console.log('supports ', supports);
   }, []);
 
   useEffect(() => {
-    // canvas.remove(rect);
     canvas.on({
       "object:modified": function (e) {
-        // console.log(e);
         console.log(canvas.getObjects().length);
         console.log(e.target.get("type"));
         let active_shape = canvas.getActiveObject();
         let coords = active_shape.aCoords;
         let type = e.target.get("type");
-        // let type = 'rectangle'
-        // canvas.on('object:selected', ()=>{
-        //   console.log(e.target.get('type'));
-        // });
         console.log(active_shape);
         socket.emit("coords", { type, coords });
       },
     });
   }, []);
-
-  // useEffect(() => {
-  //   // Drawing Object On Canvas
-  //   socket.on("coords", (coords) => {
-  //     // canvas.remove(rect);
-  //     console.log("coords ", coords);
-  //     if (coords.type === "rect") {
-  //       let rect = new fabric.Rect({
-  //         left: coords.coords.tl.x,
-  //         top: coords.coords.tl.y,
-  //         fill: "transparent",
-  //         width: 80,
-  //         height: 80,
-  //         strokeWidth: 2,
-  //         stroke: "red",
-  //       });
-  //       canvas.add(rect);
-  //     } else if (coords.type === "circle") {
-  //       // canvas.remove(circle);
-  //       let circle = new fabric.Circle({
-  //         radius: 30,
-  //         fill: "transparent",
-  //         left: coords.coords.tl.x,
-  //         top: coords.coords.tl.y,
-  //         strokeWidth: 2,
-  //         stroke: "red",
-  //       });
-  //       canvas.add(circle);
-  //     }
-  //   });
-
-  //   // Removing object
-  //   socket.on("remove_object", (object) => {
-  //     console.log(object);
-  //     if (object.object === "rect") {
-  //       console.log("true");
-  //       canvas.remove(object.object);
-  //     } else if (object.object === "circle") {
-  //       canvas.remove(object.object);
-  //     }
-  //   });
-  // }, [socket]);
 
   // Create new Janus Server
   const janusStart = () => {
@@ -258,6 +192,7 @@ const MultiuserVideocall = () => {
             Janus.debug(" ::: Got a message (publisher) :::", msg);
             var event = msg["videoroom"];
             Janus.warn("Event: " + event);
+            console.log(msg);
             if (event) {
               if (event === "joined") {
                 myid = msg["id"];
@@ -270,13 +205,12 @@ const MultiuserVideocall = () => {
                   "Successfully joined room " + msg["room"] + " with ID " + myid
                 );
                 if (subscriber_mode) {
-                  // $("#videojoin").hide();
-                  // $("#videos").removeClass("hide").show();
+                  // subscriber mode
                 } else {
                   publishOwnFeed(true);
                 }
                 if (msg["publishers"].length !== 0) {
-                  remoteUserName = msg["publishers"][0].display;
+                  setRemoteUserName(msg["publishers"][0].display);
                 }
                 console.log('msg["publishers"] ', msg["publishers"]);
                 // Any new feed to attach to?
@@ -343,8 +277,9 @@ const MultiuserVideocall = () => {
                 } else if (msg["leaving"]) {
                   // One of the publishers has gone away?
                   var leaving = msg["leaving"];
-                  remoteUserName = "";
+                  setRemoteUserName("");
                   alert(`user left`);
+                  canvas.clear();
                   Janus.log("Publisher left: " + leaving);
                   var remoteFeed = null;
                   for (var i = 1; i < 6; i++) {
@@ -361,9 +296,7 @@ const MultiuserVideocall = () => {
                         remoteFeed.rfdisplay +
                         ") has left the room, detaching"
                     );
-                    // $('#remote'+remoteFeed.rfindex).empty().hide();
                     console.warn("#remote" + remoteFeed.rfindex);
-                    // $('#videoremote'+remoteFeed.rfindex).empty();
                     console.warn("#videoremote" + remoteFeed.rfindex);
                     feeds[remoteFeed.rfindex] = null;
                     remoteFeed.detach();
@@ -393,9 +326,7 @@ const MultiuserVideocall = () => {
                         remoteFeed.rfdisplay +
                         ") has left the room, detaching"
                     );
-                    // $('#remote'+remoteFeed.rfindex).empty().hide();
                     console.warn("#remote" + remoteFeed.rfindex);
-                    // $('#videoremote'+remoteFeed.rfindex).empty();
                     console.warn("#videoremote" + remoteFeed.rfindex);
                     feeds[remoteFeed.rfindex] = null;
                     remoteFeed.detach();
@@ -403,15 +334,12 @@ const MultiuserVideocall = () => {
                   delete feedStreams[unpublished];
                 } else if (msg["error"]) {
                   if (msg["error_code"] === 426) {
-                    // This is a "no such room" error: give a more meaningful description
                     alert(
                       "<p>Apparently room <code>" +
-                        // customRoomIdRef.current.value +
                         myroom +
                         "</code> (the one this demo uses as a test room) " +
                         "does not exist...</p><p>Do you have an updated <code>janus.plugin.videoroom.jcfg</code> " +
                         "configuration file? If not, make sure you copy the details of room <code>" +
-                        // customRoomIdRef.current.value +
                         myroom +
                         "</code> " +
                         "from that sample in your current configuration file, then restart Janus and try again."
@@ -425,10 +353,8 @@ const MultiuserVideocall = () => {
             console.warn("jsep ", jsep);
             if (jsep) {
               Janus.debug("Handling SDP as well...", jsep);
-              // set answerSDP to remoteSDP
               sfutest.handleRemoteJsep({ jsep: jsep });
-              // Check if any of the media we wanted to publish has
-              // been rejected (e.g., wrong or unsupported codec)
+
               var audio = msg["audio_codec"];
               if (
                 mystream &&
@@ -452,27 +378,14 @@ const MultiuserVideocall = () => {
                 alert(
                   "Our video stream has been rejected, viewers won't see us"
                 );
-                // Hide the webcam video
-                // $('#myvideo').hide();
-                // $('#videolocal').append(
-                // 	'<div class="no-video-container">' +
-                // 		'<i class="fa fa-video-camera fa-5 no-video-icon" style="height: 100%;"></i>' +
-                // 		'<span class="no-video-text" style="font-size: 16px;">Video rejected, no webcam</span>' +
-                // 	'</div>');
               }
             }
           },
           onlocaltrack: function (track, on) {
-            Janus.log(
-              "Local track " + (on ? "added" : "removed") + ":",
-              track
-            );
-            console.log();
-            // track = track.push({zoom: true})
-            // We use the track ID as name of the element, but it may contain invalid characters
+            Janus.log("Local track " + (on ? "added" : "removed") + ":", track);
+
             var trackId = track.id.replace(/[{}]/g, "");
             if (!on) {
-              // Track removed, get rid of the stream and the rendering
               var stream = localTracks[trackId];
               if (stream) {
                 try {
@@ -484,17 +397,9 @@ const MultiuserVideocall = () => {
                 } catch (e) {}
               }
               if (track.kind === "video") {
-                // $('#myvideo' + trackId).remove();
                 localVideos--;
                 if (localVideos === 0) {
                   // No video, at least for now: show a placeholder
-                  // if($('#videolocal .no-video-container').length === 0) {
-                  // 	$('#videolocal').append(
-                  // 		'<div class="no-video-container">' +
-                  // 			'<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
-                  // 			'<span class="no-video-text">No webcam available</span>' +
-                  // 		'</div>');
-                  // }
                 }
               }
               delete localTracks[trackId];
@@ -514,37 +419,20 @@ const MultiuserVideocall = () => {
               // We ignore local audio tracks, they'd generate echo anyway
               if (localVideos === 0) {
                 // No video, at least for now: show a placeholder
-                // if($('#videolocal .no-video-container').length === 0) {
-                // 	$('#videolocal').append(
-                // 		'<div class="no-video-container">' +
-                // 			'<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
-                // 			'<span class="no-video-text">No webcam available</span>' +
-                // 		'</div>');
-                // }
               }
             } else {
               // New video track: create a stream out of it
               localVideos++;
-              // $('#videolocal .no-video-container').remove();
               stream = new MediaStream([track]);
-               localTracks[trackId] = stream;
-              Janus.log("Created local stream:", stream)
+              localTracks[trackId] = stream;
+              Janus.log("Created local stream:", stream);
 
-              // $('#videolocal').append('<video class="rounded centered" id="myvideo' + trackId + '" width=100% autoplay playsinline muted="muted"/>');
               Janus.attachMediaStream(localVideoRef.current, stream);
             }
             if (
               sfutest.webrtcStuff.pc.iceConnectionState !== "completed" &&
               sfutest.webrtcStuff.pc.iceConnectionState !== "connected"
             ) {
-              // $("#videolocal").parent().parent().block({
-              // 	message: '<b>Publishing...</b>',
-              // 	css: {
-              // 		border: 'none',
-              // 		backgroundColor: 'transparent',
-              // 		color: 'white'
-              // 	}
-              // });
               console.log("publishing.. ");
             }
           },
@@ -572,12 +460,10 @@ const MultiuserVideocall = () => {
   }
 
   function getQueryStringValue(name) {
-    console.log(location.pathname, name);
-    // alert('location.pathname', location.pathname)
     name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
-    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
-      // results = regex.exec(location.pathname.search);
-      results = location.pathname.slice(1);
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)");
+
+    let results = "";
     return results === null ? "" : results;
   }
   const registerUser = (username) => {
@@ -588,22 +474,20 @@ const MultiuserVideocall = () => {
       console.log(username);
       var register = {
         request: "join",
-        room: parseInt(customRoomIdRef.current.value),
-        // room: parseInt(myroom),
+        // room: parseInt(customRoomIdRef.current.value),
+        room: parseInt(myroom),
         ptype: "publisher",
         display: username,
       };
+      const succes = () => {
+        console.log("iiii");
+      };
       myusername = escapeXmlTags(username);
-      sfutest.send({ message: register });
+      sfutest.send({ message: register, success: succes });
     }
   };
 
   function publishOwnFeed(useAudio) {
-    // Publish our stream
-    // $('#publish').attr('disabled', true).unbind('click');
-
-    // We want sendonly audio and video (uncomment the data track
-    // too if you want to publish via datachannels as well)
     let tracks = [];
     if (useAudio) tracks.push({ type: "audio", capture: true, recv: false });
     tracks.push({
@@ -612,13 +496,11 @@ const MultiuserVideocall = () => {
       recv: false,
       simulcast: doSimulcast,
     });
-    // tracks.push({ type: 'data' });
 
     console.log("get tracks ", tracks);
     sfutest.createOffer({
       tracks: tracks,
       customizeSdp: function (jsep) {
-        // If DTX is enabled, munge the SDP
         if (doDtx) {
           jsep.sdp = jsep.sdp.replace(
             "useinbandfec=1",
@@ -628,19 +510,8 @@ const MultiuserVideocall = () => {
       },
       success: function (jsep) {
         Janus.debug("Got publisher SDP!", jsep);
-
         var publish = { request: "configure", audio: useAudio, video: true };
-        // // You can force a specific codec to use when publishing by using the
-        // // audiocodec and videocodec properties, for instance:
-        // // 		publish["audiocodec"] = "opus"
-        // // to force Opus as the audio codec to use, or:
-        // // 		publish["videocodec"] = "vp9"
-        // // to force VP9 as the videocodec to use. In both case, though, forcing
-        // // a codec will only work if: (1) the codec is actually in the SDP (and
-        // // so the browser supports it), and (2) the codec is in the list of
-        // // allowed codecs in a room. With respect to the point (2) above,
-        // // refer to the text in janus.plugin.videoroom.jcfg for more details.
-        // // We allow people to specify a codec via query string, for demo purposes
+
         if (acodec) publish["audiocodec"] = acodec;
         if (vcodec) publish["videocodec"] = vcodec;
         sfutest.send({ message: publish, jsep: jsep });
@@ -651,7 +522,6 @@ const MultiuserVideocall = () => {
           publishOwnFeed(false);
         } else {
           alert("WebRTC error... " + error.message);
-          // $('#publish').removeAttr('disabled').click(function() { publishOwnFeed(true); });
         }
       },
     });
@@ -659,8 +529,8 @@ const MultiuserVideocall = () => {
 
   function newRemoteFeed(id, display, streams) {
     // setRemoteUserName(display);
-    remoteUserName = display;
     console.warn(id, display, streams);
+    setRemoteUserName(display);
     var remoteFeed = null;
     console.warn("streams ", streams);
     if (!streams) streams = feedStreams[id];
@@ -680,13 +550,11 @@ const MultiuserVideocall = () => {
             ")"
         );
         Janus.log("  -- This is a subscriber");
-        // Prepare the streams to subscribe to, as an array: we have the list of
-        // streams the feed is publishing, so we can choose what to pick or skip
+
         var subscription = [];
         for (var i in streams) {
           console.error("streams ", streams[i]);
           var stream = streams[i];
-          // If the publisher is VP8/VP9 and this is an older Safari, let's avoid video
           if (
             stream.type === "video" &&
             Janus.webRTCAdapter.browserDetails.browser === "safari" &&
@@ -705,15 +573,13 @@ const MultiuserVideocall = () => {
             feed: stream.id, // This is mandatory
             mid: stream.mid, // This is optional (all streams, if missing)
           });
-          // FIXME Right now, this is always the same feed: in the future, it won't
           remoteFeed.rfid = stream.id;
           remoteFeed.rfdisplay = escapeXmlTags(stream.display);
         }
-        // We wait for the plugin to send us an offer
         var subscribe = {
           request: "join",
-          room: parseInt(customRoomIdRef.current.value),
-          // room: parseInt(myroom),
+          // room: parseInt(customRoomIdRef.current.value),
+          room: parseInt(myroom),
           ptype: "subscriber",
           streams: subscription,
           use_msid: use_msid,
@@ -766,14 +632,7 @@ const MultiuserVideocall = () => {
                 break;
               }
             }
-            // if(!remoteFeed.spinner) {
-            //   var target = document.getElementById('videoremote'+remoteFeed.rfindex);
-            //   remoteFeed.spinner = new Spinner({top:100}).spin(target);
-            // } else {
-            //   remoteFeed.spinner.spin();
-            // }
             Janus.log("Successfully attached to feed in room " + msg["room"]);
-            // $('#remote'+remoteFeed.rfindex).removeClass('hide').html(remoteFeed.rfdisplay).show();
           } else if (event === "event") {
             // Check if we got a simulcast-related event from this publisher
             var substream = msg["substream"];
@@ -784,11 +643,7 @@ const MultiuserVideocall = () => {
             ) {
               if (!remoteFeed.simulcastStarted) {
                 remoteFeed.simulcastStarted = true;
-                // Add some new buttons
-                // addSimulcastButtons(remoteFeed.rfindex, true);
               }
-              // We just received notice that there's been a switch, update the buttons
-              // updateSimulcastButtons(remoteFeed.rfindex, substream, temporal);
             }
           } else {
             // What has just happened?
@@ -801,10 +656,6 @@ const MultiuserVideocall = () => {
           // Answer and attach
           remoteFeed.createAnswer({
             jsep: jsep,
-            // We only specify data channels here, as this way in
-            // case they were offered we'll enable them. Since we
-            // don't mention audio or video tracks, we autoaccept them
-            // as recvonly (since we won't capture anything ourselves)
             tracks: [{ type: "data" }],
             customizeSdp: function (jsep) {
               if (stereo && jsep.sdp.indexOf("stereo=1") == -1) {
@@ -819,9 +670,9 @@ const MultiuserVideocall = () => {
               Janus.debug("Got SDP!", jsep);
               var body = {
                 request: "start",
-                room: parseInt(customRoomIdRef.current.value),
+                // room: parseInt(customRoomIdRef.current.value),
               };
-              // var body = { request: "start", room: parseInt(myroom) };
+              var body = { request: "start", room: parseInt(myroom) };
               remoteFeed.send({ message: body, jsep: jsep });
             },
             error: function (error) {
@@ -847,18 +698,10 @@ const MultiuserVideocall = () => {
         );
         if (!on) {
           // Track removed, get rid of the stream and the rendering
-          // $('#remotevideo'+remoteFeed.rfindex + '-' + mid).remove();
           if (track.kind === "video") {
             remoteFeed.remoteVideos--;
             if (remoteFeed.remoteVideos === 0) {
               // No video, at least for now: show a placeholder
-              // if($('#videoremote'+remoteFeed.rfindex + ' .no-video-container').length === 0) {
-              //   $('#videoremote'+remoteFeed.rfindex).append(
-              //     '<div class="no-video-container">' +
-              //       '<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
-              //       '<span class="no-video-text">No remote video available</span>' +
-              //     '</div>');
-              // }
               console.log(
                 "Track removed, get rid of the stream and the rendering"
               );
@@ -872,13 +715,6 @@ const MultiuserVideocall = () => {
           remoteFeed.spinner.stop();
           remoteFeed.spinner = null;
         }
-        // if($('#remotevideo' + remoteFeed.rfindex + '-' + mid).length > 0)
-        // 	return;
-        // if (
-        //   document.getElementById(`#remotevideo-${remoteFeed.rfindex}-${mid}`)
-        //     .length > 0
-        // )
-        //   return;
 
         if (track.kind === "audio") {
           // New audio track: create a stream out of it, and use a hidden <audio> element
@@ -887,61 +723,24 @@ const MultiuserVideocall = () => {
           Janus.error("Created remote audio stream:", stream);
 
           // attach remote video stream
-          // $('#videoremote'+remoteFeed.rfindex).append('<audio class="hide" id="remotevideo' + remoteFeed.rfindex + '-' + mid + '" autoplay playsinline/>');
           Janus.attachMediaStream(remoteAudioRef.current, stream);
 
           if (remoteFeed.remoteVideos === 0) {
             // No video, at least for now: show a placeholder
-            // if($('#videoremote'+remoteFeed.rfindex + ' .no-video-container').length === 0) {
-            // 	$('#videoremote'+remoteFeed.rfindex).append(
-            // 		'<div class="no-video-container">' +
-            // 			'<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
-            // 			'<span class="no-video-text">No remote video available</span>' +
-            // 		'</div>');
-            // }
           }
         } else {
           // New video track: create a stream out of it
           remoteFeed.remoteVideos++;
           console.error("remotefeed ", remoteFeed.remoteVideos);
-          // $('#videoremote'+remoteFeed.rfindex + ' .no-video-container').remove();
           Janus.log([track]);
           let stream = new MediaStream([track]);
           remoteFeed.remoteTracks[mid] = stream;
-          Janus.log(
-            "Created remote video stream:",
-            stream
-          );
-          // $('#videoremote'+remoteFeed.rfindex).append('<video class="rounded centered" id="remotevideo' + remoteFeed.rfindex + '-' + mid + '" width=100% autoplay playsinline/>');
-          // $('#videoremote'+remoteFeed.rfindex).append(
-          // 	'<span class="label label-primary hide" id="curres'+remoteFeed.rfindex+'" style="position: absolute; bottom: 0px; left: 0px; margin: 15px;"></span>' +
-          // 	'<span class="label label-info hide" id="curbitrate'+remoteFeed.rfindex+'" style="position: absolute; bottom: 0px; right: 0px; margin: 15px;"></span>');
-          // const videoContainer = document.querySelector("#video-container");
-          // const video = document.createElement("video");
-          // alert('created new video element')
-          // video.setAttribute("id", `remotevideo-${remoteFeed.rfindex}-${mid}`);
-          // video.setAttribute("autoplay", ``);
-          // video.setAttribute("playsinline", ``);
-          // videoContainer.appendChild(video);
-          // Janus.attachMediaStream(video, stream);
-          // console.warn("stream ", stream.videoWidth);
+          Janus.log("Created remote video stream:", stream);
           Janus.attachMediaStream(remoteVideoRef.current, stream);
           // Note: we'll need this for additional videos too
 
           if (!bitrateTimer[remoteFeed.rfindex]) {
-            // $('#curbitrate'+remoteFeed.rfindex).removeClass('hide').show();
-            // bitrateTimer[remoteFeed.rfindex] = setInterval(function() {
-            // 	if(!$("#videoremote" + remoteFeed.rfindex + ' video').get(0))
-            // 		return;
-            // 	// Display updated bitrate, if supported
-            // 	var bitrate = remoteFeed.getBitrate();
-            // 	$('#curbitrate'+remoteFeed.rfindex).text(bitrate);
-            // 	// Check if the resolution changed too
-            // 	var width = $("#videoremote" + remoteFeed.rfindex + ' video').get(0).videoWidth;
-            // 	var height = $("#videoremote" + remoteFeed.rfindex + ' video').get(0).videoHeight;
-            // 	if(width > 0 && height > 0)
-            // 		$('#curres'+remoteFeed.rfindex).removeClass('hide').text(width+'x'+height).show();
-            // }, 1000);
+            // show bitrateTimer
           }
         }
       },
@@ -949,19 +748,6 @@ const MultiuserVideocall = () => {
         Janus.log(
           " ::: Got a cleanup notification (remote feed " + id + ") :::"
         );
-        // if(remoteFeed.spinner)
-        // 	remoteFeed.spinner.stop();
-        // remoteFeed.spinner = null;
-        // $('#remotevideo'+remoteFeed.rfindex).remove();
-        // $('#waitingvideo'+remoteFeed.rfindex).remove();
-        // $('#novideo'+remoteFeed.rfindex).remove();
-        // $('#curbitrate'+remoteFeed.rfindex).remove();
-        // $('#curres'+remoteFeed.rfindex).remove();
-        // if(bitrateTimer[remoteFeed.rfindex])
-        // 	clearInterval(bitrateTimer[remoteFeed.rfindex]);
-        // bitrateTimer[remoteFeed.rfindex] = null;
-        // remoteFeed.simulcastStarted = false;
-        // $('#simulcast'+remoteFeed.rfindex).remove();
         remoteFeed.remoteTracks = {};
         remoteFeed.remoteVideos = 0;
       },
@@ -973,8 +759,8 @@ const MultiuserVideocall = () => {
 
     let listOfParticipants = {
       request: "listparticipants",
-      room: parseInt(customRoomIdRef.current.value),
-      // room: myroom,
+      // room: parseInt(customRoomIdRef.current.value),
+      room: myroom,
     };
 
     let succes = (data) => {
@@ -985,8 +771,8 @@ const MultiuserVideocall = () => {
         if (isParticipants >= 0) {
           var register = {
             request: "join",
-            room: parseInt(customRoomIdRef.current.value),
-            // room: parseInt(myroom),
+            // room: parseInt(customRoomIdRef.current.value),
+            room: parseInt(myroom),
             ptype: "publisher",
             display: "Pratik",
           };
@@ -1002,9 +788,7 @@ const MultiuserVideocall = () => {
             description: "first custom room",
             // is_private: true,
           };
-          // myusername = escapeXmlTags(username);
           console.log("sfutest", sfutest);
-          // sfutest.send({ message: createRoom });
           sfutest.send({ message: createRoom, success: succes });
         }
       } else if (data.videoroom === "created") {
@@ -1013,23 +797,6 @@ const MultiuserVideocall = () => {
     };
 
     sfutest.send({ message: listOfParticipants, success: succes });
-
-    // console.log("roomid", parseInt(roomId));
-    // if (roomId === "") {
-    //   alert("Insert a username to register (e.g. 4523)");
-    //   return;
-    // } else {
-    //   var createRoom = {
-    //     request: "create",
-    //     room: parseInt(roomId),
-    //     // permanent: false,
-    //     description: "first custom room",
-    //     // is_private: true,
-    //   };
-    //   // myusername = escapeXmlTags(username);
-    //   console.log("sfutest", sfutest);
-    //   sfutest.send({ message: createRoom });
-    // }
   };
 
   const handleLeave = () => {
@@ -1037,8 +804,8 @@ const MultiuserVideocall = () => {
 
     let listOfParticipants = {
       request: "listparticipants",
-      room: parseInt(customRoomIdRef.current.value),
-      // room: myroom,
+      // room: parseInt(customRoomIdRef.current.value),
+      room: myroom,
     };
 
     let succes = (data) => {
@@ -1049,13 +816,12 @@ const MultiuserVideocall = () => {
           // alert(isParticipants)
           let destroyRoom = {
             request: "destroy",
-            // room : myroom,
+            room: myroom,
             secret: "adminpwd",
-            room: parseInt(customRoomIdRef.current.value),
+            // room: parseInt(customRoomIdRef.current.value),
             permanent: true,
           };
           sfutest.send({ message: destroyRoom, success: succes });
-          // alert('room Destroyed')
         } else {
           console.log("leaving...");
           socket.emit("user_leave", myid);
@@ -1074,6 +840,10 @@ const MultiuserVideocall = () => {
   };
 
   const addRectangle = () => {
+    if (canvas.getObjects().filter((obj) => obj.type === "rect").length > 0) {
+      console.log("more objects");
+      return;
+    }
     console.log("adding rectangle");
     var rect = new fabric.Rect({
       left: 100,
@@ -1098,36 +868,12 @@ const MultiuserVideocall = () => {
     });
   };
 
-  // const addRectangle = () => {
-  //   // create a rectangle object
-  //   // canvas.remove(rect);
-  //   rect.set({ strokeWidth: 2, stroke: "red" });
-
-  //   // "add" rectangle onto canvas
-  //   canvas.add(rect);
-  //   // fabric.Object.prototype.transparentCorners = false;
-  //   // fabric.Object.prototype.cornerColor = "blue";
-  //   // fabric.Object.prototype.cornerStyle = "circle";
-  //   // rect.set("selectable", true);
-  //   let acoords = rect.getCoords();
-  //   console.log(acoords);
-  //   // canvas.setActiveObject(rect);
-  //   // let active_shape = canvas.getActiveObject();
-  //   // let coords = active_shape.aCoords;
-  //   socket.emit("coords", {
-  //     type: "rect",
-  //     coords: {
-  //       tl: { x: acoords[0].x, y: acoords[0].y },
-  //       tr: { x: acoords[1].x, y: acoords[1].y },
-  //       bl: { x: acoords[2].x, y: acoords[2].y },
-  //       br: { x: acoords[3].x, y: acoords[3].y },
-  //     },
-  //   });
-  //   console.log(canvas.getObjects().length);
-  // };
-
   const addCircle = () => {
     console.log("adding circle");
+    if (canvas.getObjects().filter((obj) => obj.type === "circle").length > 0) {
+      console.log("more objects");
+      return;
+    }
     var circle = new fabric.Circle({
       radius: 30,
       fill: "transparent",
@@ -1150,42 +896,17 @@ const MultiuserVideocall = () => {
     });
   };
 
-  // const addCircle = () => {
-  //   // canvas.remove(circle);
-  //   // circle = new fabric.Circle({
-  //   //   radius: 30,
-  //   //   fill: "transparent",
-  //   //   left: 100,
-  //   //   top: 100,
-  //   // });
-  //   circle.set({ strokeWidth: 2, stroke: "red" });
-  //   canvas.centerObject(circle);
-  //   canvas.add(circle);
-  //   let acoords = circle.getCoords();
-  //   console.log(acoords);
-  //   // canvas.setActiveObject(circle);
-  //   // let active_shape = canvas.getActiveObject();
-  //   // let coords = active_shape.aCoords;
-  //   socket.emit("coords", {
-  //     type: "circle",
-  //     coords: {
-  //       tl: { x: acoords[0].x, y: acoords[0].y },
-  //       tr: { x: acoords[1].x, y: acoords[1].y },
-  //       bl: { x: acoords[2].x, y: acoords[2].y },
-  //       br: { x: acoords[3].x, y: acoords[3].y },
-  //     },
-  //   });
-  // };
-
   const handleRemoveObject = (e) => {
-    // canvas.clear()
-    // console.log(canvas.getObjects().length);
-    console.log(canvas.getActiveObject().get("type"));
-    let object = canvas.getActiveObject().get("type");
-    canvas.remove(canvas.getActiveObject());
-    socket.emit("remove_object", {
-      type: object,
-    });
+    try {
+      console.log(canvas.getActiveObject().get("type"));
+      let object = canvas.getActiveObject().get("type");
+      canvas.remove(canvas.getActiveObject());
+      socket.emit("remove_object", {
+        type: object,
+      });
+    } catch {
+      alert("Please select shape.");
+    }
   };
 
   // mute own stream mike
@@ -1214,34 +935,10 @@ const MultiuserVideocall = () => {
     console.log(remoteVideoRef.current.videoHeight);
   };
 
-  const zoomInHAndler = () => {
-    console.log('zooming in');
-    zoom = zoom + 0.1
-    remoteVideoRef.current.style['transform'] =  'scale(' +zoom+ ')' 
-  }
-
-  // const input = document.querySelector("input[type=range]");
-  // input.min = capabilities.zoom.min;
-  // input.max = capabilities.zoom.max;
-  // input.step = capabilities.zoom.step;
-  // input.value = settings.zoom;
-
-  // input.addEventListener("input", async () => {
-  //   await videoTrack.applyConstraints({ advanced: [{ zoom: input.value }] });
-  // });
-
   return (
     <div>
       <div>
         <div style={{ textAlign: "center" }}>
-          <input
-            type="number"
-            ref={customRoomIdRef}
-            placeholder="enter roomId..."
-          />
-          <button onClick={() => createRoom(customRoomIdRef.current.value)}>
-            Create/Join Room
-          </button>
           <input
             type="text"
             ref={usernameRef}
@@ -1255,7 +952,7 @@ const MultiuserVideocall = () => {
         </div>
         <div style={{}}>
           <div>
-            <h3>local Video</h3>
+            {/* <h3>local Video</h3> */}
             <video
               ref={localVideoRef}
               muted
@@ -1266,19 +963,9 @@ const MultiuserVideocall = () => {
                 borderColor: "black",
                 borderStyle: "solid",
                 height: "300px",
-                // display: "none",
+                display: "none",
               }}
             />
-
-            <input type="range" ref={inputRef} />
-
-            {/* bug: Changing Unmute and Mute text of button */}
-            {/* <button onClick={toggleMuteHandler}>
-              {isMuted ? "Unmute" : "Mute"}
-            </button>
-           
-              <button onClick={unpublishOwnFeedHandler}>Unpublish</button>
-              <button onClick={publishOwnFeed}>Publish</button> */}
           </div>
           <div style={{ height: "100%" }}>
             <div>
@@ -1298,29 +985,25 @@ const MultiuserVideocall = () => {
                 muted
                 playsInline
                 autoPlay
-                width={1080}
-                height={420}
+                width={1280}
+                height={670}
                 style={{
                   position: "absolute ",
+                  backgroundColor: "rgb(80, 78, 78)",
                 }}
                 onPlay={onPlayHandler}
               />
-              <canvas id="canvas" />
+              <canvas id="canvas" style={{ position: "absolute" }} />
             </div>
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <button onClick={addRectangle} style={{ position: "absolute" }}>
-            Add Rectangle
-          </button>
-          <button onClick={handleRemoveObject} style={{ marginLeft: "300px" }}>
-            Delete Shape
-          </button>
+          <button onClick={addRectangle}>Add Rectangle</button>
           <button style={{ marginLeft: 2 }} onClick={addCircle}>
             Add Circle
           </button>
-          <button style={{ marginLeft: 2 }} onClick={zoomInHAndler}>
-            Zoom In
+          <button onClick={handleRemoveObject} style={{ marginLeft: 2 }}>
+            Delete Shape
           </button>
         </div>
       </div>

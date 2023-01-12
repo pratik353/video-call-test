@@ -794,6 +794,7 @@ function Janus(gatewayCallbacks) {
       error: function (textStatus, errorThrown) {
         Janus.error(textStatus + ":", errorThrown);
         retries++;
+        alert('retries', retries)
         if (retries > 3) {
           // Did we just lose the server? :-(
           connected = false;
@@ -1022,6 +1023,7 @@ function Janus(gatewayCallbacks) {
         Janus.debug(jsep);
       }
       let callback = pluginHandle.onmessage;
+      console.log('callback', callback);
       if (callback) {
         Janus.debug("Notifying application...");
         // Send to callback specified when attaching plugin handle
@@ -1777,6 +1779,8 @@ function Janus(gatewayCallbacks) {
     let request = { janus: "message", body: message, transaction: transaction };
     if (pluginHandle.token) request["token"] = pluginHandle.token;
     if (apisecret) request["apisecret"] = apisecret;
+
+    // on join request it not going in jsep code
     if (jsep) {
       request.jsep = {
         type: jsep.type,
